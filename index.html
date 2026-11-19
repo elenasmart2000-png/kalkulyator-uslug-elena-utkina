@@ -1,0 +1,832 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Калькулятор стоимости услуг</title>
+  <script>
+    // ПРАЙС. Чтобы изменить стоимость, замените число после price в нужной строке.
+    // Указывайте сумму в рублях без пробелов, например 12500 или 12500.50.
+    // Если цена пока неизвестна, укажите null. Сохраните файл в кодировке UTF-8.
+    const services = [
+      { name: "Бухгалтерия ИП на УСН без сотрудников", unit: "месяц", price: 5500, details: "первичка, налоги, декларация, ответы на требования" },
+      { name: "Бухгалтерия ООО на УСН", unit: "месяц", price: 14000, details: "до 50 операций в месяц, отчётность, сверки с контрагентами" },
+      { name: "Зарплата и кадры", unit: "сотрудник в день", price: 900, details: "расчёт зарплаты, отпускные, больничные, отчёты в СФР" },
+      { name: "Декларация 3-НДФЛ", unit: "документ", price: 3500, details: "вычет за квартиру, лечение или обучение, подача через личный кабинет" },
+      { name: "Восстановление учёта", unit: "месяц учёта", price: 7000, details: "разбор выписок и первички, исправление ошибок, сверка с налоговой" },
+      { name: "Управленческая отчётность", unit: "месяц", price: 12000, details: "ОПиУ, ДДС и баланс в таблице, комментарий к цифрам" },
+      { name: "Платёжный календарь", unit: "месяц", price: 6000, details: "план поступлений и платежей по неделям, контроль кассовых разрывов" },
+      { name: "Консультация финансиста", unit: "час", price: 4000, details: "онлайн-встреча, разбор вопроса, письменные выводы после встречи" }
+    ];
+    const provider = {
+      name: "Елена Уткина",
+      role: "Финансовый директор на аутсорсе для малого и среднего бизнеса",
+      telegramHandle: "elena_utkina_fin"
+    };
+  </script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --paper: #0d1014;
+      --surface: #191e25;
+      --field: #11161d;
+      --ink: #f0f4f8;
+      --muted: #b8c5d1;
+      --line: #3a4652;
+      --control-line: #8595a4;
+      --accent: #65f0ba;
+      --accent-hover: #9bf7d2;
+      --tint: #1b332e;
+      --tint-hover: #25443a;
+      --warning: #ffb4a5;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      line-height: 1.5;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; color: var(--ink); background: var(--paper); }
+    h1, h2, p, dl, dd { margin: 0; }
+    button, input { font: inherit; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+    a { color: var(--ink); text-underline-offset: 0.22em; }
+    input[type="checkbox"], input[type="radio"] {
+      width: 1.2rem;
+      height: 1.2rem;
+      margin: 0;
+      flex: none;
+      accent-color: var(--accent);
+    }
+    .page {
+      width: min(100%, 76rem);
+      margin-inline: auto;
+      padding: clamp(1rem, 4vw, 3rem) clamp(0.85rem, 3vw, 2rem) calc(8.5rem + env(safe-area-inset-bottom, 0px));
+    }
+    .page-header {
+      border-inline-start: 4px solid var(--control-line);
+      padding-inline-start: clamp(0.75rem, 2.2vw, 1.6rem);
+      margin-bottom: clamp(1.5rem, 3vw, 2.5rem);
+    }
+    h1 {
+      max-width: 28ch;
+      font-size: clamp(1.95rem, 4.6vw, 3.4rem);
+      line-height: 1.08;
+      letter-spacing: -0.045em;
+      text-wrap: balance;
+    }
+    .page-header p { margin-top: 0.75rem; color: var(--muted); }
+    .workspace, .calculator { display: grid; gap: 1rem; }
+    .workspace > *, .calculator > * { min-width: 0; }
+    .panel {
+      padding: clamp(0.95rem, 2.5vw, 1.6rem);
+      border: 1px solid var(--line);
+      border-radius: 1rem;
+      background: var(--surface);
+    }
+    h2 { font-size: 1.25rem; line-height: 1.25; }
+    .panel > h2 { margin-bottom: 0.45rem; }
+    .help, .service-details, .quote-detail { color: var(--muted); font-size: 0.875rem; }
+    .services { display: grid; margin-top: 0.7rem; }
+    .service { border-bottom: 1px solid var(--line); }
+    .service:last-child { border-bottom: 0; }
+    .service-option {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: start;
+      column-gap: 0.75rem;
+      padding-block: 0.9rem;
+      cursor: pointer;
+    }
+    .service-option > input { margin-top: 0.15rem; }
+    .service-info { display: grid; gap: 0.2rem; }
+    .service-name { font-weight: 650; }
+    .service-price { color: var(--ink); font-size: 0.875rem; font-weight: 600; }
+    .service:has(input:checked) :is(.service-name, .service-price) { color: var(--accent); }
+    .quantities {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 0.85rem;
+      margin: -0.1rem 0 0.9rem 1.95rem;
+    }
+    .quantity-hint { flex-basis: 100%; }
+    .quantity { display: grid; gap: 0.25rem; font-size: 0.875rem; color: var(--muted); }
+    .quantity input, .name-field input, .manual-copy textarea {
+      min-width: 0;
+      min-height: 2.75rem;
+      padding: 0.5rem 0.65rem;
+      border: 1px solid var(--control-line);
+      border-radius: 0.45rem;
+      background: var(--field);
+      color: var(--ink);
+      font: inherit;
+      font-size: 1rem;
+    }
+    .quantity input { width: 7rem; }
+    .quantity input[aria-invalid="true"] { border-color: var(--warning); }
+    .quantity-error { margin: 0 0 0.85rem 1.95rem; }
+    .conditions { display: grid; gap: 0.85rem; margin-top: 1rem; }
+    fieldset { min-inline-size: 0; padding: 0; margin: 0; border: 0; }
+    legend, .name-field label { padding: 0; font-weight: 650; }
+    .options { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; }
+    .option {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      min-height: 2.75rem;
+      padding: 0.42rem 0.65rem;
+      border: 1px solid var(--control-line);
+      border-radius: 0.45rem;
+      font-size: 0.9375rem;
+      cursor: pointer;
+    }
+    .option:has(input:checked) { border-color: var(--accent); background: var(--tint); }
+    .option:has(input:disabled) { border-color: var(--line); color: var(--muted); cursor: default; }
+    .package .help { margin-top: 0.35rem; }
+    .name-field { display: grid; gap: 0.4rem; }
+    .name-field input { width: min(100%, 25rem); }
+    .name-field input::placeholder { color: var(--muted); opacity: 1; }
+    .quote {
+      display: flex;
+      flex-direction: column;
+      align-self: start;
+      gap: 0.9rem;
+      min-width: 0;
+      scroll-margin-block: 1rem 6.5rem;
+    }
+    .quote-total {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.25rem 0.65rem;
+      padding: 0.9rem;
+      border-radius: 0.65rem;
+      background: var(--tint);
+      color: var(--accent);
+      font-weight: 650;
+    }
+    .quote-total strong {
+      font-size: clamp(1.55rem, 4vw, 2.1rem);
+      line-height: 1.15;
+      letter-spacing: -0.035em;
+    }
+    .amount { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .quote-person { overflow-wrap: anywhere; }
+    .quote-lines { list-style: none; padding: 0; margin: 0; }
+    .quote-lines li, .quote-costs > div {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: baseline;
+      gap: 0.6rem;
+    }
+    .quote-lines li { padding: 0.55rem 0; border-top: 1px solid var(--line); }
+    .quote-line-name { display: block; font-weight: 600; }
+    .quote-detail { display: block; margin-top: 0.1rem; }
+    .quote-costs { display: grid; gap: 0.4rem; padding-top: 0.7rem; border-top: 1px solid var(--line); }
+    .quote-costs > div:first-child { font-weight: 650; }
+    .quote-costs dd { text-align: right; }
+    .quote-warning { color: var(--warning); font-size: 0.875rem; }
+    .actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+    .actions > .button-primary { grid-column: 1 / -1; }
+    .button {
+      min-height: 3rem;
+      padding: 0.55rem 0.7rem;
+      border: 1px solid var(--accent);
+      border-radius: 0.5rem;
+      background: var(--tint);
+      color: var(--accent);
+      font-weight: 650;
+      cursor: pointer;
+    }
+    .button-primary { background: var(--accent); color: var(--paper); }
+    .button:hover:enabled { background: var(--tint-hover); }
+    .button-primary:hover:enabled { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .button:disabled { border-color: var(--line); background: var(--surface); color: var(--muted); cursor: default; }
+    .status:empty { display: none; }
+    .manual-copy textarea { display: block; width: 100%; margin-top: 0.35rem; resize: vertical; }
+    .page-footer { margin-top: 1.25rem; font-size: 0.9375rem; }
+    .mobile-total {
+      position: fixed;
+      z-index: 2;
+      inset: auto 0 0;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      padding: 0.6rem 1rem calc(0.6rem + env(safe-area-inset-bottom, 0px));
+      border-top: 1px solid var(--line);
+      background: var(--surface);
+      box-shadow: 0 -4px 20px #0008;
+    }
+    .mobile-total > div { display: grid; min-width: 0; max-width: 100%; }
+    .mobile-total span { font-size: 0.875rem; color: var(--muted); }
+    .mobile-total strong {
+      font-size: 1.4rem;
+      line-height: 1.2;
+      color: var(--accent);
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .mobile-total a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      flex: none;
+      margin-inline-start: auto;
+      padding-inline: 0.75rem;
+      border: 1px solid var(--accent);
+      border-radius: 0.5rem;
+      background: var(--tint);
+      color: var(--accent);
+      font-weight: 650;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .print-only { display: none; }
+    @media (min-width: 56rem) {
+      .page { padding-bottom: 2.5rem; }
+      .workspace { grid-template-columns: minmax(0, 1.65fr) minmax(20rem, 1fr); align-items: start; }
+      .quote { position: sticky; top: 0.8rem; }
+      .quote-lines { max-height: 27vh; overflow-y: auto; scrollbar-width: thin; }
+      .mobile-total { display: none; }
+      .service-option { grid-template-columns: auto minmax(0, 1fr) auto; }
+      .service-price { text-align: right; padding-top: 0.15rem; }
+    }
+    @media (max-width: 55.99rem) {
+      .service-price { grid-column: 2; margin-top: 0.25rem; }
+    }
+    @media (max-width: 23rem) {
+      .actions { grid-template-columns: minmax(0, 1fr); }
+    }
+    @page { size: A4; margin: 15mm; }
+    @media print {
+      :root {
+        color-scheme: light;
+        --surface: #fff;
+        --muted: #4e6464;
+        --line: #d6e0dd;
+        --warning: #963b2e;
+        font-size: 11pt;
+      }
+      body { color: #111; background: #fff; }
+      a { color: #104940; }
+      .page { width: 100%; padding: 0; }
+      .page-header, .calculator, .page-footer, .mobile-total, .actions,
+      .status, .manual-copy, .screen-only { display: none !important; }
+      .workspace, .print-only { display: block; }
+      .quote { position: static; padding: 0; border: 0; border-radius: 0; outline: 0; gap: 0.65rem; }
+      .receipt-heading { break-inside: avoid; margin-bottom: 0.35rem; }
+      .receipt-title { font-size: 19pt; margin-bottom: 0.4rem; }
+      .receipt-provider { font-weight: 650; }
+      .receipt-role, .receipt-contact { font-size: 10pt; }
+      .receipt-contact { margin-top: 0.15rem; }
+      .quote-total { order: 1; background: none; color: #111; border-top: 2px solid #444; border-radius: 0; padding: 0.65rem 0 0; }
+      .quote-total strong { font-size: 16pt; }
+      .quote-lines { max-height: none; overflow: visible; }
+      .quote-lines li, .quote-costs, .quote-total { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <h1>Калькулятор стоимости услуг</h1>
+      <p>Финансовый директор на аутсорсе для малого и среднего бизнеса</p>
+    </header>
+
+    <main class="workspace">
+      <form class="calculator" id="calculator" novalidate>
+        <section class="panel" aria-labelledby="services-title">
+          <h2 id="services-title">Услуги</h2>
+          <p class="help">Отметьте нужные услуги и укажите количество.</p>
+          <div class="services" id="services"></div>
+          <noscript><p>Для расчёта включите JavaScript в браузере.</p></noscript>
+        </section>
+
+        <section class="panel" aria-labelledby="conditions-title">
+          <h2 id="conditions-title">Условия расчёта</h2>
+          <div class="conditions">
+            <fieldset aria-describedby="urgency-help">
+              <legend>Срок выполнения</legend>
+              <p class="help" id="urgency-help">Наценка за срочность начисляется на сумму после скидки.</p>
+              <div class="options">
+                <label class="option"><input type="radio" name="urgency" value="regular" checked>Обычный</label>
+                <label class="option"><input type="radio" name="urgency" value="urgent" id="urgent">Срочно (+30%)</label>
+              </div>
+            </fieldset>
+
+            <div class="package">
+              <label class="option">
+                <input type="checkbox" id="package" aria-describedby="package-help" disabled>
+                Оплата сразу за 6 месяцев
+              </label>
+              <p class="help" id="package-help"></p>
+              <p class="help">От трёх разных услуг действует скидка 5%. Применяется одна скидка.</p>
+            </div>
+
+            <fieldset aria-describedby="vat-help">
+              <legend>НДС</legend>
+              <p class="help" id="vat-help">НДС начисляется после скидки и наценки за срочность.</p>
+              <div class="options">
+                <label class="option"><input type="radio" name="vat" value="none" checked>Без НДС</label>
+                <label class="option"><input type="radio" name="vat" value="with-vat" id="vat">НДС 20% сверху</label>
+              </div>
+            </fieldset>
+
+            <div class="name-field">
+              <label for="customer">Как к вам обращаться</label>
+              <input id="customer" name="customer" type="text" autocomplete="name" maxlength="100" placeholder="Ваше имя" aria-describedby="customer-help">
+              <p class="help" id="customer-help">Имя попадёт в расчёт. Поле можно оставить пустым.</p>
+            </div>
+          </div>
+        </section>
+      </form>
+
+      <aside class="panel quote" id="calculation" tabindex="-1" aria-labelledby="calculation-title">
+        <h2 class="screen-only" id="calculation-title">Ваш расчёт</h2>
+        <div class="receipt-heading print-only">
+          <h2 class="receipt-title" id="receipt-title"></h2>
+          <p class="receipt-provider" id="receipt-provider"></p>
+          <p class="receipt-role" id="receipt-role"></p>
+          <p class="receipt-contact" id="receipt-contact"></p>
+        </div>
+        <div class="quote-total">
+          <span>Итого</span>
+          <strong class="amount" id="total" aria-live="polite" aria-atomic="true">0 ₽</strong>
+        </div>
+        <p class="quote-warning" id="quote-warning" role="status" hidden></p>
+        <div class="actions" role="group" aria-label="Действия с расчётом">
+          <button class="button button-primary" id="copy" type="button" disabled>Скопировать расчёт</button>
+          <button class="button" id="print" type="button" disabled>Распечатать</button>
+          <button class="button" id="save-pdf" type="button" disabled>Сохранить PDF</button>
+        </div>
+        <p class="help screen-only" id="actions-help">Кнопки станут доступны после выбора услуги.</p>
+        <p class="help status" id="action-status" role="status"></p>
+        <div class="manual-copy" id="manual-copy" hidden>
+          <label class="help" for="copy-text">Скопируйте выделенный текст вручную.</label>
+          <textarea id="copy-text" rows="6" readonly></textarea>
+        </div>
+        <p class="quote-person" id="quote-person" hidden></p>
+        <p class="help" id="quote-empty">Здесь появятся выбранные услуги.</p>
+        <ul class="quote-lines" id="quote-lines" aria-label="Выбранные услуги" hidden></ul>
+        <dl class="quote-costs">
+          <div><dt>Сумма услуг</dt><dd class="amount" id="subtotal">0 ₽</dd></div>
+          <div><dt id="discount-label">Скидка</dt><dd class="amount" id="discount">0 ₽</dd></div>
+          <div><dt id="urgency-label">Наценка за срочность</dt><dd class="amount" id="surcharge">0 ₽</dd></div>
+          <div><dt id="vat-label">НДС</dt><dd class="amount" id="tax">0 ₽</dd></div>
+        </dl>
+      </aside>
+    </main>
+
+    <footer class="page-footer" id="contact" hidden></footer>
+  </div>
+
+  <div class="mobile-total">
+    <div><span>Итого</span><strong class="amount" id="mobile-amount">0 ₽</strong></div>
+    <a href="#calculation">К расчёту</a>
+  </div>
+
+  <script>
+    const quoteTitle = "Расчёт стоимости услуг";
+    const telegramLabel = "Telegram · @" + provider.telegramHandle;
+    const telegramUrl = "https://t.me/" + encodeURIComponent(provider.telegramHandle);
+    const terms = { volumeCount: 3, volumeRate: 5, packageMonths: 6, packageRate: 10, urgencyRate: 30, vatRate: 20 };
+    const fieldsByUnit = {
+      "месяц": [{ label: "Месяцы", abbreviation: "мес." }],
+      "сотрудник в день": [
+        { label: "Сотрудники", abbreviation: "сотр." },
+        { label: "Дни", abbreviation: "дн." }
+      ],
+      "документ": [{ label: "Документы", abbreviation: "док." }],
+      "месяц учёта": [{ label: "Месяцы учёта", abbreviation: "мес. учёта" }],
+      "час": [{ label: "Часы", abbreviation: "ч" }]
+    };
+    const quantityHints = {
+      "месяц": "На сколько месяцев нужна услуга.",
+      "сотрудник в день": "Укажите число сотрудников и количество дней на каждого.",
+      "документ": "Сколько деклараций нужно подготовить.",
+      "месяц учёта": "За сколько месяцев нужно восстановить учёт.",
+      "час": "Длительность консультации в целых часах."
+    };
+    const numbers = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2, useGrouping: "always" });
+    const decimals = new Intl.NumberFormat("ru-RU", {
+      minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: "always"
+    });
+    const byId = (id) => document.getElementById(id);
+    const form = byId("calculator");
+    const packageOption = byId("package");
+    const quoteLines = byId("quote-lines");
+    const quotePerson = byId("quote-person");
+    const quoteWarning = byId("quote-warning");
+    const copyButton = byId("copy");
+    const printButton = byId("print");
+    const pdfButton = byId("save-pdf");
+    const actionStatus = byId("action-status");
+    const manualCopy = byId("manual-copy");
+    const copyText = byId("copy-text");
+
+    function money(amount) {
+      if (amount === null) return "—";
+      const roundedToWholeRubles = Math.abs(amount - Math.round(amount)) < 0.005;
+      const format = roundedToWholeRubles ? numbers : decimals;
+      return format.format(amount) + "\u00A0₽";
+    }
+
+    function element(tag, className, value = "") {
+      const node = document.createElement(tag);
+      node.className = className;
+      node.textContent = value;
+      return node;
+    }
+
+    function hasPrice(service) {
+      return Number.isFinite(service.price) && service.price >= 0;
+    }
+
+    function createService(service, index) {
+      const row = element("div", "service");
+      const option = element("label", "service-option");
+      const selected = document.createElement("input");
+      selected.type = "checkbox";
+      selected.name = "service";
+      selected.setAttribute("aria-labelledby", "service-name-" + index);
+      const info = element("span", "service-info");
+      const name = element("span", "service-name", service.name);
+      name.id = "service-name-" + index;
+      info.append(name, element("span", "service-details", service.details));
+      const priceText = hasPrice(service) ? money(service.price) + " / " + service.unit : "Цену уточнить";
+      option.append(selected, info, element("span", "service-price", priceText));
+
+      const quantities = element("div", "quantities");
+      const hint = element("p", "help quantity-hint", quantityHints[service.unit]);
+      hint.id = "quantity-hint-" + index;
+      quantities.append(hint);
+      const error = element("p", "quote-warning quantity-error", "Укажите целое количество от 1.");
+      error.id = "quantity-error-" + index;
+      const fields = fieldsByUnit[service.unit].map(({ label, abbreviation }) => {
+        const quantity = element("label", "quantity", label);
+        const input = document.createElement("input");
+        input.type = "text";
+        input.inputMode = "numeric";
+        input.value = "1";
+        input.maxLength = 9;
+        input.disabled = true;
+        input.setAttribute("aria-label", label + " — " + service.name);
+        input.setAttribute("aria-describedby", hint.id + " " + error.id);
+        quantity.append(input);
+        quantities.append(quantity);
+        return { input, abbreviation };
+      });
+      quantities.hidden = true;
+      error.hidden = true;
+      row.append(option, quantities, error);
+      byId("services").append(row);
+      return { service, selected, quantities, fields, error };
+    }
+
+    function readQuantity(input) {
+      const text = input.value.trim();
+      const quantity = Number(text);
+      return /^\d+$/.test(text) && Number.isSafeInteger(quantity) && quantity >= 1 ? quantity : null;
+    }
+
+    function readLines() {
+      const lines = [];
+      for (const row of serviceRows) {
+        const selected = row.selected.checked;
+        row.quantities.hidden = !selected;
+        const counts = row.fields.map(({ input }) => {
+          input.disabled = !selected;
+          const count = selected ? readQuantity(input) : null;
+          input.setAttribute("aria-invalid", String(selected && count === null));
+          return count;
+        });
+        row.error.hidden = true;
+        if (!selected) continue;
+
+        const priceKnown = hasPrice(row.service);
+        const invalidQuantity = counts.includes(null);
+        const amount = !invalidQuantity && priceKnown
+          ? counts.reduce((product, count) => product * count, row.service.price)
+          : null;
+        const amountTooLarge = amount !== null && !Number.isSafeInteger(Math.round(amount * 100));
+        row.error.hidden = !(invalidQuantity || amountTooLarge);
+        row.error.textContent = amountTooLarge ? "Сумма слишком велика. Уменьшите количество."
+          : "Укажите целое количество от 1.";
+        const detail = counts.map((count, index) => {
+          const quantity = count === null ? "—" : numbers.format(count);
+          return quantity + " " + row.fields[index].abbreviation;
+        }).join(" × ");
+        lines.push({
+          name: row.service.name,
+          detail: detail + (priceKnown ? " × " + money(row.service.price) : ""),
+          amount: amountTooLarge ? null : amount,
+          priceKnown,
+          periodMonths: row.service.unit === "месяц" ? counts[0] : undefined
+        });
+      }
+      return lines;
+    }
+
+    function calculate(lines, packageApplied, urgent, withVat) {
+      const volumeRate = lines.length >= terms.volumeCount ? terms.volumeRate : 0;
+      const packageWins = packageApplied && terms.packageRate >= volumeRate;
+      const discountRate = packageWins ? terms.packageRate : volumeRate;
+      const discountLabel = packageWins ? "Скидка за пакет (" + terms.packageRate + "%)"
+        : discountRate ? "Скидка за объём (" + terms.volumeRate + "%)" : "Скидка";
+      const labels = {
+        discount: discountLabel,
+        urgency: urgent ? "Наценка за срочность (" + terms.urgencyRate + "%)" : "Наценка за срочность",
+        vat: withVat ? "НДС (" + terms.vatRate + "%)" : "Без НДС"
+      };
+      if (lines.some((line) => line.amount === null)) {
+        return { subtotal: null, discount: null, surcharge: null, tax: null, total: null, labels };
+      }
+
+      const subtotal = lines.reduce((sum, line) => sum + line.amount, 0);
+      const discount = subtotal * discountRate / 100;
+      const afterDiscount = subtotal - discount;
+      const surcharge = urgent ? afterDiscount * terms.urgencyRate / 100 : 0;
+      const beforeVat = afterDiscount + surcharge;
+      const tax = withVat ? beforeVat * terms.vatRate / 100 : 0;
+      return { subtotal, discount, surcharge, tax, total: beforeVat + tax, labels };
+    }
+
+    function discountMoney(amount) {
+      return amount > 0 ? "−" + money(amount) : money(amount);
+    }
+
+    function quoteCosts(result) {
+      return [
+        ["Сумма услуг", money(result.subtotal)],
+        [result.labels.discount, discountMoney(result.discount)],
+        [result.labels.urgency, money(result.surcharge)],
+        [result.labels.vat, money(result.tax)]
+      ];
+    }
+
+    function messengerText({ lines, result, customer }) {
+      const rows = [quoteTitle];
+      if (customer) rows.push("Имя: " + customer);
+      rows.push("");
+      for (const line of lines) {
+        rows.push("• " + line.name + " · " + line.detail + " = " + money(line.amount));
+      }
+      rows.push(
+        "",
+        ...quoteCosts(result).map(([label, amount]) => label + ": " + amount),
+        "Итого: " + money(result.total)
+      );
+      return rows.join("\n");
+    }
+
+    function updateQuote() {
+      const lines = readLines();
+      const monthlyLines = lines.filter((line) => line.periodMonths !== undefined);
+      const packageAvailable = monthlyLines.length > 0
+        && monthlyLines.every((line) => line.periodMonths >= terms.packageMonths);
+      packageOption.disabled = !packageAvailable;
+      if (!packageAvailable) packageOption.checked = false;
+      byId("package-help").textContent = packageAvailable
+        ? "При оплате сразу за 6 месяцев действует скидка 10% на весь расчёт."
+        : "Для скидки 10% выберите хотя бы одну регулярную услугу и укажите от 6 месяцев для каждой такой услуги.";
+
+      const result = calculate(lines, packageOption.checked, byId("urgent").checked, byId("vat").checked);
+      const customer = byId("customer").value.trim().replace(/\s+/g, " ");
+      quotePerson.hidden = !customer;
+      quotePerson.textContent = "Имя: " + customer;
+      byId("quote-empty").hidden = lines.length > 0;
+      quoteLines.hidden = lines.length === 0;
+      quoteLines.replaceChildren(...lines.map((line) => {
+        const item = document.createElement("li");
+        const description = document.createElement("span");
+        description.append(element("span", "quote-line-name", line.name), element("span", "quote-detail", line.detail));
+        const lineTotal = line.priceKnown ? money(line.amount) : "Уточнить";
+        item.append(description, element("span", "amount", lineTotal));
+        return item;
+      }));
+
+      byId("subtotal").textContent = money(result.subtotal);
+      byId("discount-label").textContent = result.labels.discount;
+      byId("discount").textContent = discountMoney(result.discount);
+      byId("urgency-label").textContent = result.labels.urgency;
+      byId("surcharge").textContent = money(result.surcharge);
+      byId("vat-label").textContent = result.labels.vat;
+      byId("tax").textContent = money(result.tax);
+      const total = money(result.total);
+      if (byId("total").textContent !== total) byId("total").textContent = total;
+      byId("mobile-amount").textContent = total;
+
+      quoteWarning.hidden = result.total !== null;
+      quoteWarning.textContent = lines.some((line) => !line.priceKnown)
+        ? "Для итогового расчёта уточните цену выбранной услуги."
+        : "Для итогового расчёта проверьте количество выбранных услуг.";
+      const canExport = lines.length > 0 && result.total !== null;
+      copyButton.disabled = printButton.disabled = pdfButton.disabled = !canExport;
+      byId("actions-help").hidden = lines.length > 0;
+      actionStatus.textContent = "";
+      manualCopy.hidden = true;
+      return canExport ? { lines, result, customer } : null;
+    }
+
+    async function copyCalculation(text) {
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(text);
+          actionStatus.textContent = "Расчёт скопирован.";
+          return;
+        } catch {
+          // В некоторых браузерах локальному файлу требуется запасной способ.
+        }
+      }
+
+      copyText.value = text;
+      manualCopy.hidden = false;
+      copyText.focus({ preventScroll: true });
+      copyText.select();
+      let copied = false;
+      try {
+        copied = document.execCommand("copy");
+      } catch {
+        // Поле с выделенным текстом остаётся доступным для ручного копирования.
+      }
+      if (copied) {
+        manualCopy.hidden = true;
+        copyButton.focus({ preventScroll: true });
+        actionStatus.textContent = "Расчёт скопирован.";
+      } else {
+        copyText.scrollIntoView({ block: "nearest" });
+      }
+    }
+
+    const pdfPage = { width: 595.28, height: 841.89 };
+
+    function drawPdfPage({ lines, result, customer }) {
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(pdfPage.width * 2.5);
+      canvas.height = Math.round(pdfPage.height * 2.5);
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Canvas is unavailable");
+      context.scale(canvas.width / pdfPage.width, canvas.height / pdfPage.height);
+      context.fillStyle = "#fff";
+      context.fillRect(0, 0, pdfPage.width, pdfPage.height);
+
+      const left = 42;
+      const right = pdfPage.width - left;
+      const width = right - left;
+      const ink = "#162927";
+      const font = (size, weight = 400) => {
+        context.font = weight + " " + size + 'px "Segoe UI", sans-serif';
+      };
+      const rule = (y, color = "#d6e0dd") => {
+        context.fillStyle = color;
+        context.fillRect(left, y, width, 0.7);
+      };
+      const pair = (label, value, y, size = 12, weight = 400) => {
+        context.fillStyle = ink;
+        font(size, weight);
+        const valueWidth = Math.min(context.measureText(value).width, 160);
+        context.fillText(label, left, y, width - valueWidth - 16);
+        context.textAlign = "right";
+        context.fillText(value, right, y, 160);
+        context.textAlign = "left";
+      };
+
+      context.fillStyle = ink;
+      font(23, 700);
+      context.fillText(quoteTitle, left, 57, width);
+      font(12, 650);
+      context.fillText(provider.name, left, 78, width);
+      font(11);
+      context.fillText(provider.role, left, 95, width);
+      context.fillStyle = "#104940";
+      font(11, 600);
+      const contactBaseline = 112;
+      const contactWidth = context.measureText(telegramLabel).width;
+      context.fillText(telegramLabel, left, contactBaseline);
+      context.fillRect(left, contactBaseline + 2, contactWidth, 0.6);
+      // Координаты PDF отсчитываются от нижнего края страницы.
+      const contactBox = [
+        left, pdfPage.height - contactBaseline - 5,
+        left + contactWidth, pdfPage.height - contactBaseline + 12
+      ].map((coordinate) => coordinate.toFixed(2)).join(" ");
+      let y = 135;
+      if (customer) {
+        context.fillStyle = ink;
+        font(12);
+        let nameLine = "";
+        for (const letter of "Имя: " + customer) {
+          if (context.measureText(nameLine + letter).width > width) {
+            context.fillText(nameLine, left, y);
+            nameLine = "";
+            y += 16;
+          }
+          nameLine += letter;
+        }
+        context.fillText(nameLine, left, y);
+        y += 13;
+      }
+      for (const line of lines) {
+        rule(y);
+        pair(line.name, money(line.amount), y + 17, 12, 600);
+        context.fillStyle = "#4e6464";
+        font(10.5);
+        context.fillText(line.detail, left, y + 33, width);
+        y += 44;
+      }
+      rule(y);
+      y += 20;
+      quoteCosts(result).forEach(([label, value], index) => {
+        pair(label, value, y, 12, index === 0 ? 650 : 400);
+        y += 20;
+      });
+      rule(y - 5, ink);
+      pair("Итого", money(result.total), y + 17, 16, 700);
+      return { canvas, contactBox };
+    }
+
+    function imagePdf(jpeg, width, height, contactBox) {
+      const encoder = new TextEncoder();
+      const chunks = [];
+      const offsets = [0];
+      let position = 0;
+      function write(value) {
+        const bytes = typeof value === "string" ? encoder.encode(value) : value;
+        chunks.push(bytes);
+        position += bytes.byteLength;
+      }
+      function object(id, content, stream) {
+        offsets[id] = position;
+        write(id + " 0 obj\n" + content + "\n");
+        if (stream) {
+          write("stream\n");
+          write(stream);
+          write("\nendstream\n");
+        }
+        write("endobj\n");
+      }
+
+      // PDF хранит смещения объектов в байтах, в том числе после бинарного JPEG.
+      write("%PDF-1.4\n%âãÏÓ\n");
+      object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+      object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+      object(3, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + pdfPage.width + " " + pdfPage.height
+        + "] /Resources << /XObject << /QuoteImage 4 0 R >> >> /Contents 5 0 R /Annots [6 0 R] >>");
+      object(4, "<< /Type /XObject /Subtype /Image /Width " + width + " /Height " + height
+        + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + jpeg.byteLength + " >>", jpeg);
+      const draw = encoder.encode("q\n" + pdfPage.width + " 0 0 " + pdfPage.height + " 0 0 cm\n/QuoteImage Do\nQ\n");
+      object(5, "<< /Length " + draw.byteLength + " >>", draw);
+      const uri = Array.from(encoder.encode(telegramUrl), (byte) => byte.toString(16).padStart(2, "0")).join("");
+      object(6, "<< /Type /Annot /Subtype /Link /Rect [" + contactBox
+        + "] /Border [0 0 0] /A << /S /URI /URI <" + uri + "> >> >>");
+
+      const xref = position;
+      write("xref\n0 " + offsets.length + "\n0000000000 65535 f \n");
+      for (const offset of offsets.slice(1)) {
+        write(String(offset).padStart(10, "0") + " 00000 n \n");
+      }
+      write("trailer\n<< /Size " + offsets.length + " /Root 1 0 R >>\nstartxref\n" + xref + "\n%%EOF\n");
+      return new Blob(chunks, { type: "application/pdf" });
+    }
+
+    function saveCalculation(quote) {
+      try {
+        const { canvas, contactBox } = drawPdfPage(quote);
+        const image = canvas.toDataURL("image/jpeg", 0.96);
+        const jpeg = Uint8Array.from(atob(image.split(",")[1]), (byte) => byte.charCodeAt(0));
+        if (!jpeg.length) throw new Error("The page image could not be created");
+        const pdf = imagePdf(jpeg, canvas.width, canvas.height, contactBox);
+        const url = URL.createObjectURL(pdf);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "расчёт-стоимости-услуг.pdf";
+        link.hidden = true;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        actionStatus.textContent = "PDF готов к скачиванию.";
+      } catch {
+        actionStatus.textContent = "Не удалось подготовить PDF. Попробуйте снова или воспользуйтесь печатью.";
+      }
+    }
+
+    const telegram = element("a", "", telegramLabel);
+    telegram.href = telegramUrl;
+    byId("receipt-title").textContent = quoteTitle;
+    byId("receipt-provider").textContent = provider.name;
+    byId("receipt-role").textContent = provider.role;
+    byId("receipt-contact").append(telegram.cloneNode(true));
+    byId("contact").append("Связаться с финансовым директором · ", telegram);
+    byId("contact").hidden = false;
+
+    const serviceRows = services.map(createService);
+    let currentQuote = updateQuote();
+    form.addEventListener("input", () => { currentQuote = updateQuote(); });
+    form.addEventListener("submit", (event) => event.preventDefault());
+    copyButton.addEventListener("click", () => { if (currentQuote) copyCalculation(messengerText(currentQuote)); });
+    printButton.addEventListener("click", () => { if (currentQuote) window.print(); });
+    pdfButton.addEventListener("click", () => { if (currentQuote) saveCalculation(currentQuote); });
+  </script>
+</body>
+</html>
