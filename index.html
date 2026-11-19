@@ -321,12 +321,12 @@
                 Оплата сразу за 6 месяцев
               </label>
               <p class="help" id="package-help"></p>
-              <p class="help">От трёх разных услуг действует скидка 5%. Применяется одна скидка.</p>
+              <p class="help">От трёх разных услуг скидка 5% применяется автоматически. Действует бо́льшая скидка.</p>
             </div>
 
             <fieldset aria-describedby="vat-help">
               <legend>НДС</legend>
-              <p class="help" id="vat-help">НДС начисляется после скидки и наценки за срочность.</p>
+              <p class="help" id="vat-help">Выберите один вариант. НДС начисляется после скидки и наценки за срочность.</p>
               <div class="options">
                 <label class="option"><input type="radio" name="vat" value="none" checked>Без НДС</label>
                 <label class="option"><input type="radio" name="vat" value="with-vat" id="vat">НДС 20% сверху</label>
@@ -588,7 +588,7 @@
       packageOption.disabled = !packageAvailable;
       if (!packageAvailable) packageOption.checked = false;
       byId("package-help").textContent = packageAvailable
-        ? "При оплате сразу за 6 месяцев действует скидка 10% на весь расчёт."
+        ? "При предоплате отметьте галочку для скидки 10% на весь расчёт."
         : "Для скидки 10% выберите хотя бы одну регулярную услугу и укажите от 6 месяцев для каждой такой услуги.";
 
       const result = calculate(lines, packageOption.checked, byId("urgent").checked, byId("vat").checked);
